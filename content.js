@@ -1,3 +1,4 @@
+
 (() => {
   const CARD_SELECTOR = '[class*="EventBoxContainerBase"]';
   const CLOCK_SELECTOR = '[class*="EventLiveTimerLabel"]';
@@ -11,15 +12,21 @@
   let settings = null;
   let scheduled = false;
   const observedRoots = new WeakSet();
-const DEFAULTS = {
-  enabled: true,
-  firstEnabled: true,
-  firstMin: 40,
-  firstMax: 45,
-  secondEnabled: true,
-  secondMin: 80,
-  secondMax: 90
-};
+
+  // Sound notification tracking
+  let previousQualifyingMatches = new Set();
+  let notificationBaselineInitialized = false;
+
+  const DEFAULTS = {
+    enabled: true,
+    firstEnabled: true,
+    firstMin: 40,
+    firstMax: 45,
+    secondEnabled: true,
+    secondMin: 80,
+    secondMax: 90,
+    playSoundInForeground: true
+  };
 
   function collectRoots(startRoot = document, roots = []) {
     if (!startRoot || roots.includes(startRoot)) return roots;
@@ -31,107 +38,109 @@ const DEFAULTS = {
     return roots;
   }
 
-function parseClock(raw, injuryRaw = "") {
-  const value = String(raw || "").trim();
-  const injury = String(injuryRaw || "").trim();
+  function parseClock(raw, injuryRaw = "") {
+    const value = String(raw || "").trim();
+    const injury = String(injuryRaw || "").trim();
 
-  // Clock with seconds: 42:33
-  let match = value.match(/^(\d{1,3}):([0-5]\d)$/);
+    // Clock with seconds: 42:33
+    let match = value.match(/^(\d{1,3}):([0-5]\d)$/);
 
-  if (match) {
-    return {
-      minute: Number(match[1]),
-      baseMinute: Number(match[1]),
-      second: Number(match[2])
-    };
-  }
-
-  // Clock without seconds: 3, 3', 41, 41'
-  match = value.match(/^(\d{1,3})\s*['’′]?$/);
-
-  if (match) {
-    const baseMinute = Number(match[1]);
-    const injuryMatch = injury.match(/^\+\s*(\d{1,2}):([0-5]\d)$/);
-
-    if (injuryMatch) {
+    if (match) {
       return {
-        minute: baseMinute + Number(injuryMatch[1]),
-        baseMinute,
-        second: Number(injuryMatch[2])
+        minute: Number(match[1]),
+        baseMinute: Number(match[1]),
+        second: Number(match[2])
       };
     }
 
-    return {
-      minute: baseMinute,
-      baseMinute,
-      second: 0
-    };
+    // Clock without seconds: 3, 3', 41, 41'
+    match = value.match(/^(\d{1,3})\s*['’′]?$/);
+
+    if (match) {
+      const baseMinute = Number(match[1]);
+      const injuryMatch = injury.match(/^\+\s*(\d{1,2}):([0-5]\d)$/);
+
+      if (injuryMatch) {
+        return {
+          minute: baseMinute + Number(injuryMatch[1]),
+          baseMinute,
+          second: Number(injuryMatch[2])
+        };
+      }
+
+      return {
+        minute: baseMinute,
+        baseMinute,
+        second: 0
+      };
+    }
+
+    // Combined stoppage time: 90+2:45
+    match = value.match(/^(\d{1,3})\s*\+\s*(\d{1,2}):([0-5]\d)$/);
+
+    if (match) {
+      return {
+        minute: Number(match[1]) + Number(match[2]),
+        baseMinute: Number(match[1]),
+        second: Number(match[3])
+      };
+    }
+
+    return null;
   }
 
-  // Combined stoppage time: 90+2:45
-  match = value.match(/^(\d{1,3})\s*\+\s*(\d{1,2}):([0-5]\d)$/);
+  function cardHasExcludedStatus(card) {
+    const statusElement = card.querySelector(STATUS_SELECTOR);
 
-  if (match) {
-    return {
-      minute: Number(match[1]) + Number(match[2]),
-      baseMinute: Number(match[1]),
-      second: Number(match[3])
-    };
+    if (!statusElement) return false;
+
+    const status = statusElement.textContent.trim().toLowerCase();
+
+    return status === "descanso" || status === "no iniciado";
   }
 
-  return null;
-}
+  function matchesFilter(card) {
+    const clockElement = card.querySelector(CLOCK_SELECTOR);
 
-function cardHasExcludedStatus(card) {
-  const statusElement = card.querySelector(STATUS_SELECTOR);
+    if (!clockElement) return false;
 
-  if (!statusElement) return false;
+    const injuryElement = card.querySelector(INJURY_SELECTOR);
 
-  const status = statusElement.textContent.trim().toLowerCase();
+    const clock = parseClock(
+      clockElement.textContent,
+      injuryElement?.textContent || ""
+    );
 
-  return status === "descanso" || status === "no iniciado";
-}
+    if (!clock) return false;
 
-function matchesFilter(card) {
-  const clockElement = card.querySelector(CLOCK_SELECTOR);
+    // Treat clocks with and without seconds consistently.
+    const currentMinute = clock.minute;
 
-  if (!clockElement) return false;
+    // Exclude extra time and anything beyond minute 90.
+    if (currentMinute > 90) return false;
 
-  const injuryElement = card.querySelector(INJURY_SELECTOR);
+    // First half
+    if (currentMinute <= 45) {
+      return (
+        settings.firstEnabled &&
+        currentMinute >= settings.firstMin &&
+        currentMinute <= settings.firstMax
+      );
+    }
 
-  const clock = parseClock(
-    clockElement.textContent,
-    injuryElement?.textContent || ""
-  );
-
-  if (!clock) return false;
-
-  // Treat clocks with and without seconds consistently.
-  const currentMinute = clock.minute;
-
-  // Exclude extra time and anything beyond minute 90.
-  if (currentMinute > 90) return false;
-
-  // First half
-  if (currentMinute <= 45) {
+    // Second half
     return (
-      settings.firstEnabled &&
-      currentMinute >= settings.firstMin &&
-      currentMinute <= settings.firstMax
+      settings.secondEnabled &&
+      currentMinute >= settings.secondMin &&
+      currentMinute <= settings.secondMax
     );
   }
 
-  // Second half
-  return (
-    settings.secondEnabled &&
-    currentMinute >= settings.secondMin &&
-    currentMinute <= settings.secondMax
-  );
-}
   function setElementVisible(element, visible, hiddenAttr, originalAttr) {
     if (!element.hasAttribute(originalAttr)) {
       element.setAttribute(originalAttr, element.style.display || "");
     }
+
     if (visible) {
       element.style.display = element.getAttribute(originalAttr) || "";
       element.removeAttribute(hiddenAttr);
@@ -139,6 +148,64 @@ function matchesFilter(card) {
     } else {
       element.style.display = "none";
       element.setAttribute(hiddenAttr, "true");
+    }
+  }
+
+  // NEW: Detect matches entering the selected time range.
+  function checkForNewQualifyingMatches(cards) {
+
+    const currentQualifyingMatches = new Set();
+
+    if (settings.enabled) {
+      cards.forEach(card => {
+        if (cardHasExcludedStatus(card)) return;
+        if (!matchesFilter(card)) return;
+
+        const competitors = card.querySelectorAll(
+          '[class*="CompetitorName"]'
+        );
+
+        const home = competitors[0]?.textContent.trim();
+        const away = competitors[1]?.textContent.trim();
+
+        if (!home || !away) return;
+
+        const competition = card.querySelector(
+          '[class*="CategoryChampionship"]'
+        )?.textContent.trim() || "";
+
+        currentQualifyingMatches.add(
+          `${competition}|${home}|${away}`
+        );
+      });
+    }
+
+    // First scan establishes the baseline without sound.
+    if (!notificationBaselineInitialized) {
+      previousQualifyingMatches = currentQualifyingMatches;
+      notificationBaselineInitialized = true;
+      return;
+    }
+
+    const newMatches = [...currentQualifyingMatches].filter(
+      key => !previousQualifyingMatches.has(key)
+    );
+
+    previousQualifyingMatches = currentQualifyingMatches;
+
+    if (
+      newMatches.length > 0 &&
+      (
+        settings.playSoundInForeground ||
+        document.visibilityState !== "visible" ||
+        !document.hasFocus()
+      )
+    ) {
+      chrome.runtime.sendMessage({
+        type: "DORADO_PLAY_SOUND"
+      }).catch(error => {
+        console.error("[Dorado Filter] Sound error:", error);
+      });
     }
   }
 
@@ -185,19 +252,36 @@ function apply() {
 
   const visibleCards = new Set();
 
+  // Sound notifications are restricted to the main sports page.
+  const isMainSportsPage =
+    window.location.pathname.replace(/\/+$/, "") === "/deportes";
+
   cards.forEach(card => {
     const hasClock = !!card.querySelector(CLOCK_SELECTOR);
     const isLive = !!card.querySelector(LIVE_SELECTOR) || hasClock;
 
-  const excluded = cardHasExcludedStatus(card);
-const visible = !excluded && (!isLive || matchesFilter(card));
+    const excluded = cardHasExcludedStatus(card);
+    const visible = !excluded && (!isLive || matchesFilter(card));
 
+    // Was this match previously hidden by our filter?
+    const wasHidden = card.hasAttribute(HIDDEN_ATTR);
+
+    // Show or hide the card using the existing filtering logic.
     setElementVisible(
       card,
       visible,
       HIDDEN_ATTR,
       "data-dorado-filter-original-display"
     );
+
+    // Play sound only when a previously hidden match becomes visible.
+    if (isMainSportsPage && wasHidden && visible && isLive) {
+      chrome.runtime.sendMessage({
+        type: "DORADO_PLAY_SOUND"
+      }).catch(error => {
+        console.error("[Dorado Filter] Sound error:", error);
+      });
+    }
 
     if (visible) visibleCards.add(card);
   });
@@ -224,6 +308,7 @@ const visible = !excluded && (!isLive || matchesFilter(card));
     });
   });
 }
+
   function scheduleApply() {
     if (scheduled) return;
     scheduled = true;
@@ -245,16 +330,24 @@ const visible = !excluded && (!isLive || matchesFilter(card));
 
   function observeRoot(root) {
     if (observedRoots.has(root) || typeof root.querySelectorAll !== "function") return;
+
     observedRoots.add(root);
+
     const observer = new MutationObserver(() => {
       collectRoots(root).forEach(observeRoot);
       scheduleApply();
     });
-    observer.observe(root, { childList: true, subtree: true, characterData: true });
+
+    observer.observe(root, {
+      childList: true,
+      subtree: true,
+      characterData: true
+    });
   }
 
   function startObservers() {
     collectRoots().forEach(observeRoot);
+
     // Detect shadow roots attached after the page's initial render.
     setInterval(() => {
       collectRoots().forEach(observeRoot);
@@ -273,67 +366,67 @@ const visible = !excluded && (!isLive || matchesFilter(card));
   });
 
   function collectFilteredMatches() {
-  const roots = collectRoots();
+    const roots = collectRoots();
 
-  const cards = [
-    ...new Set(
-      roots.flatMap(root =>
-        Array.from(root.querySelectorAll(CARD_SELECTOR))
+    const cards = [
+      ...new Set(
+        roots.flatMap(root =>
+          Array.from(root.querySelectorAll(CARD_SELECTOR))
+        )
       )
-    )
-  ];
+    ];
 
-  return cards
-    .filter(card => {
-      return (
-        !card.hasAttribute(HIDDEN_ATTR) &&
-        !cardHasExcludedStatus(card)
+    return cards
+      .filter(card => {
+        return (
+          !card.hasAttribute(HIDDEN_ATTR) &&
+          !cardHasExcludedStatus(card)
+        );
+      })
+      .map(card => {
+        const competitors = card.querySelectorAll(
+          '[class*="CompetitorName"]'
+        );
+
+        const scores = card.querySelectorAll(
+          '[class*="Score"]'
+        );
+
+        const competition = card.querySelector(
+          '[class*="CategoryChampionship"]'
+        );
+
+        const clock = card.querySelector(STATUS_SELECTOR);
+        const injury = card.querySelector(INJURY_SELECTOR);
+
+        let time = clock?.textContent.trim() || "Unknown";
+
+        if (injury?.textContent.trim()) {
+          time += ` ${injury.textContent.trim()}`;
+        }
+
+        return {
+          competition: competition?.textContent.trim() || "Unknown",
+          home: competitors[0]?.textContent.trim() || "Unknown",
+          away: competitors[1]?.textContent.trim() || "Unknown",
+          homeScore: scores[0]?.textContent.trim() || "?",
+          awayScore: scores[1]?.textContent.trim() || "?",
+          time
+        };
+      })
+      .filter(match =>
+        match.home !== "Unknown" &&
+        match.away !== "Unknown"
       );
-    })
-    .map(card => {
-      const competitors = card.querySelectorAll(
-        '[class*="CompetitorName"]'
-      );
-
-      const scores = card.querySelectorAll(
-        '[class*="Score"]'
-      );
-
-      const competition = card.querySelector(
-        '[class*="CategoryChampionship"]'
-      );
-
-      const clock = card.querySelector(STATUS_SELECTOR);
-      const injury = card.querySelector(INJURY_SELECTOR);
-
-      let time = clock?.textContent.trim() || "Unknown";
-
-      if (injury?.textContent.trim()) {
-        time += ` ${injury.textContent.trim()}`;
-      }
-
-      return {
-        competition: competition?.textContent.trim() || "Unknown",
-        home: competitors[0]?.textContent.trim() || "Unknown",
-        away: competitors[1]?.textContent.trim() || "Unknown",
-        homeScore: scores[0]?.textContent.trim() || "?",
-        awayScore: scores[1]?.textContent.trim() || "?",
-        time
-      };
-    })
-    .filter(match =>
-      match.home !== "Unknown" &&
-      match.away !== "Unknown"
-    );
-}
-
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message?.type === "DORADO_COPY_MATCHES") {
-    const matches = collectFilteredMatches();
-
-    console.log("[Dorado Filter] Matches collected:", matches);
-
-    sendResponse({ matches });
   }
-});
+
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message?.type === "DORADO_COPY_MATCHES") {
+      const matches = collectFilteredMatches();
+
+      console.log("[Dorado Filter] Matches collected:", matches);
+
+      sendResponse({ matches });
+    }
+  });
 })();

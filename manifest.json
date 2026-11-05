@@ -1,13 +1,17 @@
+
 {
   "manifest_version": 3,
   "name": "DoradoBet Live Match Filter",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Filter DoradoBet live football matches by elapsed time in either half.",
-  "permissions": ["storage"],
+  "permissions": ["storage", "offscreen"],
   "host_permissions": [
     "https://doradobet.com/*",
     "https://www.doradobet.com/*"
   ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "action": {
     "default_title": "DoradoBet Live Filter",
     "default_popup": "popup.html"

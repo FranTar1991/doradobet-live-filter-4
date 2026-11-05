@@ -226,4 +226,30 @@ Analyze independently and objectively. Accuracy is more important than producing
     }, 1800);
   }
 });
+
+$("testSound").addEventListener("click", async () => {
+  const button = $("testSound");
+
+  button.disabled = true;
+  button.textContent = "Playing...";
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: "DORADO_PLAY_SOUND"
+    });
+
+    if (!response?.success) {
+      throw new Error(response?.error || "Unknown sound error.");
+    }
+
+    $("status").textContent = "Sound played successfully.";
+  } catch (error) {
+    console.error("Sound test error:", error);
+    $("status").textContent = error.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = "Test notification sound";
+  }
+});
+
 })();

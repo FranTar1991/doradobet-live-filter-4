@@ -276,3 +276,30 @@ input[type="checkbox"] {
   opacity: 0.6;
   cursor: wait;
 }
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sound-button {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #cbd2dc;
+  border-radius: 6px;
+  background: #fff;
+  color: #20242b;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sound-button:hover {
+  background: #f0f2f5;
+}
+
+.sound-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
