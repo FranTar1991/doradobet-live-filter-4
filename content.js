@@ -32,12 +32,12 @@ const DEFAULTS = {
   }
 
 function parseClock(raw, injuryRaw = "") {
-  const value = (typeof raw === "string" ? raw : "").trim();
-  const injury = (typeof injuryRaw === "string" ? injuryRaw : "").trim();
+  const value = String(raw || "").trim();
+  const injury = String(injuryRaw || "").trim();
 
+  // Clock with seconds: 42:33
   let match = value.match(/^(\d{1,3}):([0-5]\d)$/);
 
-  // Normal clock: 72:35
   if (match) {
     return {
       minute: Number(match[1]),
@@ -46,8 +46,8 @@ function parseClock(raw, injuryRaw = "") {
     };
   }
 
-  // Clock without seconds: 90
-  match = value.match(/^(\d{1,3})$/);
+  // Clock without seconds: 3, 3', 41, 41'
+  match = value.match(/^(\d{1,3})\s*['’′]?$/);
 
   if (match) {
     const baseMinute = Number(match[1]);
@@ -94,8 +94,8 @@ function cardHasExcludedStatus(card) {
 
 function matchesFilter(card) {
   const clockElement = card.querySelector(CLOCK_SELECTOR);
-  if (!clockElement) return true;
 
+  if (!clockElement) return false;
 
   const injuryElement = card.querySelector(INJURY_SELECTOR);
 
@@ -104,32 +104,29 @@ function matchesFilter(card) {
     injuryElement?.textContent || ""
   );
 
-  if (!clock) return true;
+  if (!clock) return false;
 
-  const elapsedSeconds = clock.minute * 60 + clock.second;
+  // Treat clocks with and without seconds consistently.
+  const currentMinute = clock.minute;
+
+  // Exclude extra time and anything beyond minute 90.
+  if (currentMinute > 90) return false;
 
   // First half
-  if (clock.baseMinute <= 45) {
-    if (!settings.firstEnabled) return false;
-
+  if (currentMinute <= 45) {
     return (
-      elapsedSeconds >= settings.firstMin * 60 &&
-      elapsedSeconds <= settings.firstMax * 60
+      settings.firstEnabled &&
+      currentMinute >= settings.firstMin &&
+      currentMinute <= settings.firstMax
     );
   }
 
-  // Second half: exclude anything beyond minute 90
-  if (clock.baseMinute > 45 && clock.baseMinute <= 90) {
-    if (!settings.secondEnabled) return false;
-
-    return (
-      elapsedSeconds >= settings.secondMin * 60 &&
-      elapsedSeconds <= settings.secondMax * 60
-    );
-  }
-
-  // Extra time, penalties or finished matches
-  return false;
+  // Second half
+  return (
+    settings.secondEnabled &&
+    currentMinute >= settings.secondMin &&
+    currentMinute <= settings.secondMax
+  );
 }
   function setElementVisible(element, visible, hiddenAttr, originalAttr) {
     if (!element.hasAttribute(originalAttr)) {
