@@ -94,9 +94,8 @@ function cardHasExcludedStatus(card) {
 
 function matchesFilter(card) {
   const clockElement = card.querySelector(CLOCK_SELECTOR);
-
-  // Don't hide a match if its clock cannot be found.
   if (!clockElement) return true;
+
 
   const injuryElement = card.querySelector(INJURY_SELECTOR);
 
@@ -105,10 +104,8 @@ function matchesFilter(card) {
     injuryElement?.textContent || ""
   );
 
-  // Don't hide a match if its clock cannot be interpreted.
   if (!clock) return true;
 
-  // Stoppage time is included in the elapsed time.
   const elapsedSeconds = clock.minute * 60 + clock.second;
 
   // First half
@@ -121,7 +118,7 @@ function matchesFilter(card) {
     );
   }
 
-  // Second half
+  // Second half: exclude anything beyond minute 90
   if (clock.baseMinute > 45 && clock.baseMinute <= 90) {
     if (!settings.secondEnabled) return false;
 
@@ -131,9 +128,9 @@ function matchesFilter(card) {
     );
   }
 
+  // Extra time, penalties or finished matches
   return false;
 }
-
   function setElementVisible(element, visible, hiddenAttr, originalAttr) {
     if (!element.hasAttribute(originalAttr)) {
       element.setAttribute(originalAttr, element.style.display || "");
@@ -277,4 +274,69 @@ const visible = !excluded && (!isLive || matchesFilter(card));
       scheduleApply();
     }
   });
+
+  function collectFilteredMatches() {
+  const roots = collectRoots();
+
+  const cards = [
+    ...new Set(
+      roots.flatMap(root =>
+        Array.from(root.querySelectorAll(CARD_SELECTOR))
+      )
+    )
+  ];
+
+  return cards
+    .filter(card => {
+      return (
+        !card.hasAttribute(HIDDEN_ATTR) &&
+        !cardHasExcludedStatus(card)
+      );
+    })
+    .map(card => {
+      const competitors = card.querySelectorAll(
+        '[class*="CompetitorName"]'
+      );
+
+      const scores = card.querySelectorAll(
+        '[class*="Score"]'
+      );
+
+      const competition = card.querySelector(
+        '[class*="CategoryChampionship"]'
+      );
+
+      const clock = card.querySelector(STATUS_SELECTOR);
+      const injury = card.querySelector(INJURY_SELECTOR);
+
+      let time = clock?.textContent.trim() || "Unknown";
+
+      if (injury?.textContent.trim()) {
+        time += ` ${injury.textContent.trim()}`;
+      }
+
+      return {
+        competition: competition?.textContent.trim() || "Unknown",
+        home: competitors[0]?.textContent.trim() || "Unknown",
+        away: competitors[1]?.textContent.trim() || "Unknown",
+        homeScore: scores[0]?.textContent.trim() || "?",
+        awayScore: scores[1]?.textContent.trim() || "?",
+        time
+      };
+    })
+    .filter(match =>
+      match.home !== "Unknown" &&
+      match.away !== "Unknown"
+    );
+}
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === "DORADO_COPY_MATCHES") {
+    const matches = collectFilteredMatches();
+
+    console.log("[Dorado Filter] Matches collected:", matches);
+
+    sendResponse({ matches });
+  }
+});
 })();

@@ -254,3 +254,25 @@ button {
 input[type="checkbox"] {
   accent-color: #2878d0;
 }
+
+.copy-button {
+  width: 100%;
+  padding: 12px;
+  margin-top: 14px;
+  border: none;
+  border-radius: 8px;
+  background: #2563eb;
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.copy-button:hover {
+  background: #1d4ed8;
+}
+
+.copy-button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
