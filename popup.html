@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DoradoBet Live Filter</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Live match filter</h1>
+        <p>Show matches within the selected time ranges.</p>
+      </div>
+      <label class="switch" title="Turn filtering on or off">
+        <input id="enabled" type="checkbox" checked>
+        <span></span>
+      </label>
+    </header>
+
+    <section class="period">
+      <div class="period-heading">
+        <label class="period-toggle">
+          <input id="firstEnabled" type="checkbox" checked>
+          First half
+        </label>
+        <output id="firstOutput">40–45 min</output>
+      </div>
+
+      <div class="range-wrap" data-range="first">
+        <div class="track"></div>
+        <div class="selected"></div>
+        <input id="firstMin" type="range" min="0" max="45" value="40">
+        <input id="firstMax" type="range" min="0" max="45" value="45">
+      </div>
+
+      <div class="scale">
+        <span>0 min</span><span>45 min</span>
+      </div>
+    </section>
+
+    <section class="period">
+      <div class="period-heading">
+        <label class="period-toggle">
+          <input id="secondEnabled" type="checkbox" checked>
+          Second half
+        </label>
+        <output id="secondOutput">80–90 min</output>
+      </div>
+
+      <div class="range-wrap" data-range="second">
+        <div class="track"></div>
+        <div class="selected"></div>
+        <input id="secondMin" type="range" min="45" max="90" value="80">
+        <input id="secondMax" type="range" min="45" max="90" value="90">
+      </div>
+
+      <div class="scale">
+        <span>45 min</span><span>90 min</span>
+      </div>
+    </section>
+
+    <div class="logic">
+      <strong>OR logic</strong>
+      <span>A match qualifies if it falls within either enabled range.</span>
+    </div>
+
+    <p id="status" role="status">Settings save automatically.</p>
+
+    <p class="note">
+      Match time includes stoppage time. “No iniciado” and “Descanso”
+      cards are hidden while filtering is enabled.
+    </p>
+  </main>
+
+  <script src="popup.js"></script>
+</body>
+</html>

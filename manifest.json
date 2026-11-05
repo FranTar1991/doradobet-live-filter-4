@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "DoradoBet Live Match Filter",
+  "version": "0.2.1",
+  "description": "Filter DoradoBet live football matches by elapsed time in either half.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://doradobet.com/*",
+    "https://www.doradobet.com/*"
+  ],
+  "action": {
+    "default_title": "DoradoBet Live Filter",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://doradobet.com/*",
+        "https://www.doradobet.com/*"
+      ],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}
